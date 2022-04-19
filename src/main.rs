@@ -4,10 +4,11 @@ use std::{
 };
 
 use btf_sys::{
-    btf_array, btf_enum, btf_header, btf_member, btf_param, btf_type, BTF_INT_BOOL, BTF_INT_CHAR,
-    BTF_INT_SIGNED, BTF_KIND_ARRAY, BTF_KIND_CONST, BTF_KIND_ENUM, BTF_KIND_FLOAT, BTF_KIND_FUNC,
+    btf_array, btf_decl_tag, btf_enum, btf_header, btf_member, btf_param, btf_type, btf_var,
+    btf_var_secinfo, BTF_INT_BOOL, BTF_INT_CHAR, BTF_INT_SIGNED, BTF_KIND_ARRAY, BTF_KIND_CONST,
+    BTF_KIND_DATASEC, BTF_KIND_DECL_TAG, BTF_KIND_ENUM, BTF_KIND_FLOAT, BTF_KIND_FUNC,
     BTF_KIND_FUNC_PROTO, BTF_KIND_FWD, BTF_KIND_INT, BTF_KIND_PTR, BTF_KIND_RESTRICT,
-    BTF_KIND_STRUCT, BTF_KIND_TYPEDEF, BTF_KIND_UNION, BTF_KIND_VOLATILE,
+    BTF_KIND_STRUCT, BTF_KIND_TYPEDEF, BTF_KIND_UNION, BTF_KIND_VAR, BTF_KIND_VOLATILE,
 };
 
 fn info_kind(ty: &btf_type) -> u32 {
@@ -83,14 +84,34 @@ enum BtfType {
         return_ty: u32,
         has_varargs: bool,
     },
-    // Var {},
-    // DataSec {},
+    Var {
+        name: String,
+        ty: u32,
+        // TODO: understand what this even means
+        linkage: u32,
+    },
+    DataSec {
+        name: String,
+        size: u32,
+        info: Vec<SecInfo>,
+    },
     Float {
         name: String,
         size: u8,
     },
-    // DeclTag {},
+    DeclTag {
+        name: String,
+        ty: u32,
+        component_idx: Option<u32>,
+    },
     // TypeTag {},
+}
+
+#[derive(Debug)]
+struct SecInfo {
+    ty: u32,
+    offset: u32,
+    size: u32,
 }
 
 #[derive(Debug)]
@@ -343,8 +364,37 @@ impl BtfType {
                     params,
                 })
             }
-            // BTF_KIND_VAR => {},
-            // BTF_KIND_DATASEC => {},
+            BTF_KIND_VAR => {
+                assert!(!info_kind_flag);
+                assert_eq!(info_vlen, 0);
+                let var: btf_var = read(data).unwrap();
+
+                Ok(BtfType::Var {
+                    name: strings.name(name_offset),
+                    ty: unsafe { ty.__bindgen_anon_1.type_ },
+                    linkage: var.linkage,
+                })
+            }
+            BTF_KIND_DATASEC => {
+                assert!(!info_kind_flag);
+                let info = (0..info_vlen)
+                    .map(|_| {
+                        let secinfo: btf_var_secinfo = read(data).unwrap();
+
+                        SecInfo {
+                            ty: secinfo.type_,
+                            offset: secinfo.offset,
+                            size: secinfo.size,
+                        }
+                    })
+                    .collect();
+
+                Ok(BtfType::DataSec {
+                    name: strings.name(name_offset),
+                    size: unsafe { ty.__bindgen_anon_1.size },
+                    info,
+                })
+            }
             BTF_KIND_FLOAT => {
                 assert!(!info_kind_flag);
                 assert_eq!(info_vlen, 0);
@@ -357,8 +407,24 @@ impl BtfType {
                     size: size as u8,
                 })
             }
-            // BTF_KIND_DECL_TAG => {},
-            // BTF_KIND_TYPE_TAG => {},
+            BTF_KIND_DECL_TAG => {
+                assert!(!info_kind_flag);
+                assert_eq!(info_vlen, 0);
+                let decl_tag: btf_decl_tag = read(data).unwrap();
+                // TODO: should we just check for -1?
+                let component_idx = if decl_tag.component_idx < 0 {
+                    None
+                } else {
+                    Some(decl_tag.component_idx as u32)
+                };
+
+                Ok(BtfType::DeclTag {
+                    name: strings.name(name_offset),
+                    ty: unsafe { ty.__bindgen_anon_1.type_ },
+                    component_idx,
+                })
+            }
+            // BTF_KIND_TYPE_TAG => {}
             k => panic!("unhandled kind: {k}"),
         }
     }
