@@ -1,0 +1,7 @@
+[package]
+name = "btf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+btf-sys = { path = "../btf-sys", version = "*" }
