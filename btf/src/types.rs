@@ -241,7 +241,7 @@ impl BtfType {
             }
             BTF_KIND_FUNC => {
                 assert!(!info_kind_flag);
-                assert_eq!(name_offset, 0);
+                assert_eq!(info_vlen, 0);
 
                 Ok(BtfType::Func {
                     name: strings.name(name_offset),
