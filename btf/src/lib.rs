@@ -8,7 +8,7 @@ use std::{
 
 use btf_sys::btf_header;
 pub use strings::StringsTable;
-pub use types::BtfType;
+pub use types::{BtfType, Member};
 
 pub struct Btf {
     types: Vec<u8>,
